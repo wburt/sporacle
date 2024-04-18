@@ -20,6 +20,7 @@ class Aoi:
     EPSG = 3005
 
     def __init__(self, input) -> None:
+        fiona.drvsupport.supported_drivers["LIBKML"] = "rw"
         df = gpd.read_file(input)
         if self.EPSG == df.crs.to_epsg():
             self.df = df
@@ -97,9 +98,9 @@ class OracleSpatialQueries:
             params = {"wkb": wkb, "srid": self.aoi.EPSG}
             cursor.execute(query, params)
             row = cursor.fetchone()
-            if row[0] > 0:
+            if row is not None:
                 logger.debug(f"{table} has features overlaping with AOI")
-        if row[0] > 0:
+        if row is not None:
             return True
         else:
             return False
@@ -126,7 +127,7 @@ class OracleSpatialQueries:
             rows = cursor.fetchall()
             all_columns.append("wkb_geom")  # append name of wkbgeom column
 
-        if len(rows) > 0:
+        if rows is not None:
             logger.debug(f"{table} has {len(rows)} features overlaping with AOI")
             gdf = gpd.GeoDataFrame(rows, columns=all_columns)
             # gdf["geom"] = gpd.GeoSeries(gdf["wkb_geom"].apply(lambda x: loads(x)))
@@ -166,9 +167,9 @@ class OracleSpatialQueries:
             params = {"wkb": wkb, "srid": self.aoi.EPSG}
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            logger.debug(f"{table} has {len(rows)} features overlaping with AOI")
             all_columns.append("wkb_geom")  # append name of wkbgeom column
-        if len(rows) > 0:
+        if rows is not None:
+            logger.debug(f"{table} has {len(rows)} features overlaping with AOI")
             gdf = gpd.GeoDataFrame(rows, columns=all_columns)
             gdf["geom"] = gpd.GeoSeries.from_wkb(
                 data=gdf["wkb_geom"], crs=f"EPSG:{self.aoi.EPSG}"

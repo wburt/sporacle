@@ -5,6 +5,9 @@ Common components for query of spatial data in Oracle database.
 oracledb
 Geopandas
 
+# Known issues
+things go wrong when user does not have access to the table
+
 # Usage Example
 
 ```

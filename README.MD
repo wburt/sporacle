@@ -7,14 +7,15 @@ Geopandas
 
 # Usage Example
 
-'''
-    db = OracleSpatialQueries(
-        user=os.environ.get("o_user"), password=os.environ.get("o_pass")
-    )
-    datatable = "WHSE_FOREST_VEGETATION.VEG_COMP_LYR_R1_POLY" 
-    q = "PROJ_AGE_1 > 30"
-    db.add_aoi("mytest_aoi.kml")
-    if db.has_relate(table=datatable, dfn_query=q):
-        db.get_intersecting(table=datatable,dfn_query=q)
-'''
+```
+db = OracleSpatialQueries(
+    user=os.environ.get("o_user"), 
+    password=os.environ.get("o_pass")
+)
+datatable = "WHSE_FOREST_VEGETATION.VEG_COMP_LYR_R1_POLY" 
+q = "PROJ_AGE_1 > 30"
+db.add_aoi("mytest_aoi.kml")
+if db.has_relate(table=datatable, dfn_query=q):
+    db.get_intersecting(table=datatable,dfn_query=q)
+```
 

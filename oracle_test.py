@@ -85,6 +85,8 @@ class OracleSpatialQueries:
         Checks for features from input table that are spatially related to aoi
         returns true if related geometry records exist
         """
+        if self.has_table(db_table=table) is False:
+            raise Exception(f"Table {table} does not exist for this user")
         logger.debug("Get related from {table}")
         geom_column = self.get_bcgw_geomcolumn(db_table=table)
 
@@ -110,6 +112,8 @@ class OracleSpatialQueries:
         Gets features from input table that are spatially related to aoi
         returns geopandas geodataframe
         """
+        if self.has_table(db_table=table) is False:
+            raise Exception(f"Table {table} does not exist for this user")
         logger.debug("Get related from {table}")
         geom_column = self.get_bcgw_geomcolumn(db_table=table)
         all_columns = self.get_bcgw_columns(db_table=table)
@@ -144,6 +148,8 @@ class OracleSpatialQueries:
         Gets intersection features from input table that are spatially related to aoi
         returns geopandas geodataframe
         """
+        if self.has_table(db_table=table) is False:
+            raise Exception(f"Table {table} does not exist for this user")
         logger.debug("Get related from {table}")
         geom_column = self.get_bcgw_geomcolumn(db_table=table)
         all_columns = self.get_bcgw_columns(db_table=table)
@@ -190,8 +196,29 @@ class OracleSpatialQueries:
     def set_aoi_buffer(self, buffer):
         pass
 
+    def has_table(self, db_table):
+        """
+        Checks if table exists for current users privilege
+        returns Boolean
+        """
+        owner, table = db_table.split(".")
+        query = f"""
+            SELECT SUM(OBJ_CNT) from (
+            SELECT count(ROWNUM) obj_cnt FROM all_views where owner = '{owner}' and view_name = '{table}' UNION
+            SELECT count(ROWNUM) obj_cnt FROM all_tables where owner = '{owner}' and table_name = '{table}')"
+            """
+        with self.conn.cursor() as cursor:
+            cursor.execute(query)
+            result = cursor.fetchone()
+        if result is not None:
+            return True
+        else:
+            return False
+
     def get_bcgw_geomcolumn(self, db_table):
         """returns the name of the geometry column for oracle table"""
+        if self.has_table(db_table=db_table) is False:
+            raise Exception(f"Table {table} does not exist for this user")
         owner, table = db_table.split(".")
         query = f"SELECT COLUMN_NAME from all_tab_columns where OWNER = '{owner}' \
             AND TABLE_NAME = '{table}' AND DATA_TYPE = 'SDO_GEOMETRY'"
@@ -203,6 +230,8 @@ class OracleSpatialQueries:
 
     def get_bcgw_columns(self, db_table):
         """returns the names of the columns for oracle table"""
+        if self.has_table(db_table=db_table) is False:
+            raise Exception(f"Table {table} does not exist for this user")
         owner, table = db_table.split(".")
         query = f"""
             SELECT COLUMN_NAME from all_tab_columns 

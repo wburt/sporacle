@@ -150,7 +150,7 @@ class OracleSpatialQueries:
         """
         if self.has_table(db_table=table) is False:
             raise Exception(f"Table {table} does not exist for this user")
-        logger.debug("Get related from {table}")
+        logger.debug(f"Get intersection of {table}")
         geom_column = self.get_bcgw_geomcolumn(db_table=table)
         all_columns = self.get_bcgw_columns(db_table=table)
         all_columns.remove(geom_column)
@@ -215,7 +215,7 @@ class OracleSpatialQueries:
             result = cursor.fetchone()
             logger.debug(f"has_table result is {result}")
         if result[0] > 0:
-            self.has_table[db_table]={}
+            self.table_dict[db_table]={}
             return True
         else:
             return False

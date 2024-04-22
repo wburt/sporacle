@@ -13,7 +13,8 @@ oracledb
 Geopandas
 
 # Known issues
-There are no known issues but also very little testing has been done.
+Very little testing has been done. 
+The multi-polygon aoi is not implimented muiltiple issues to resolve
 
 # Usage Example
 

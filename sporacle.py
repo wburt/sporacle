@@ -15,7 +15,8 @@ logger.addHandler(c_handler)
 fiona.drvsupport.supported_drivers["libkml"] = "rw"
 
 class Aoi:
-    """API import and conversion within preset coordinate system"""
+    """AOI import and reprojection within preset coordinate system
+    with methods to return WKT, WKB, and buffers"""
 
     EPSG = 3005
 
@@ -26,6 +27,7 @@ class Aoi:
             self.df = df
         else:
             self.df = df.to_crs(f"EPSG:{self.EPSG}")
+        self.buffers = {}
 
     def get_wkt_geom(self):
         wkt = self.df["geometry"].to_wkt().iloc[0]
@@ -34,7 +36,26 @@ class Aoi:
     def get_wkb_geom(self):
         wkb = self.df["geometry"].to_wkb().iloc[0]
         return wkb
+    def get_outisde_buffer(self, distance):
+        ''' buffer the aoi by distance(metres)
+            caches buffer for reuse 
+            see shapely object.buffer for **kwargs'''
+        if distance in self.buffers.keys():
+            b = self.buffers[distance]
+        else:
+            # get the exterior buffer
+            b1 = self.df.exterior.buffer(distance,single_sided=True)
+            logger.debug(f'Left hand buffer area: {b1.area} m2')
+            b2 = self.df.exterior.buffer(distance*-1,single_sided=True)
+            logger.debug(f'Right hand buffer area: {b2.area} m2')
 
+            if float(b1.area) > float(b2.area):
+                self.buffers[distance] = b1
+                b = b1
+            else:
+                self.buffers[distance] = b2
+                b = b2
+        return b
 
 class OracleSpatialQueries:
     """
@@ -80,10 +101,12 @@ class OracleSpatialQueries:
         """
         self.aoi = Aoi(aoi)
 
-    def has_relate(self, table, dfn_query=None):
+    def has_relate(self, table, dfn_query=None,buffer=None):
         """
         Checks for features from input table that are spatially related to aoi
         returns true if related geometry records exist
+        buffer: buffer distance in metres, if this is indicated 
+            only the ring buffer of this distance is used
         """
         if self.has_table(db_table=table) is False:
             raise Exception(f"Table {table} does not exist for this user")
@@ -96,7 +119,10 @@ class OracleSpatialQueries:
             query = f"SELECT ROWNUM FROM {table} WHERE SDO_RELATE ({geom_column}, SDO_GEOMETRY(:wkb,:srid),'mask=ANYINTERACT') = 'TRUE' and ROWNUM=1"
             if dfn_query is not None:
                 query = query + f" AND {dfn_query}"
-            wkb = self.aoi.get_wkb_geom()
+            if buffer is None:
+                wkb = self.aoi.get_wkb_geom()
+            else:
+                wkb = self.aoi.get_outisde_buffer(buffer).to_wkb().iloc[0]
             params = {"wkb": wkb, "srid": self.aoi.EPSG}
             cursor.execute(query, params)
             row = cursor.fetchone()
@@ -107,10 +133,11 @@ class OracleSpatialQueries:
         else:
             return False
 
-    def get_related(self, table, dfn_query=None):
+    def get_related(self, table, dfn_query=None,buffer=None):
         """
         Gets features from input table that are spatially related to aoi
         returns geopandas geodataframe
+        buffer: buffer distance in metres, if this is indicated only the ring buffer of this distance is used
         """
         if self.has_table(db_table=table) is False:
             raise Exception(f"Table {table} does not exist for this user")
@@ -125,7 +152,10 @@ class OracleSpatialQueries:
             query = f"SELECT {columns_str},sdo_util.to_wkbgeometry({geom_column}) wkb_geom FROM {table} b WHERE SDO_RELATE (b.{geom_column}, SDO_GEOMETRY(:wkb,:srid),'mask=ANYINTERACT') = 'TRUE'"
             if dfn_query is not None:
                 query = query + f" AND {dfn_query}"
-            wkb = self.aoi.get_wkb_geom()
+            if buffer is None:
+                wkb = self.aoi.get_wkb_geom()
+            else:
+                wkb = self.aoi.get_outisde_buffer(buffer).to_wkb().iloc[0]
             params = {"wkb": wkb, "srid": self.aoi.EPSG}
             cursor.execute(query, params)
             rows = cursor.fetchall()
@@ -143,10 +173,11 @@ class OracleSpatialQueries:
             gdf = None
         return gdf
 
-    def get_intersecting(self, table, dfn_query=None):
+    def get_intersecting(self, table, dfn_query=None,buffer=None):
         """
         Gets intersection features from input table that are spatially related to aoi
         returns geopandas geodataframe
+        buffer: buffer distance in metres, if this is indicated only the ring buffer of this distance is intersected
         """
         if self.has_table(db_table=table) is False:
             raise Exception(f"Table {table} does not exist for this user")
@@ -169,7 +200,10 @@ class OracleSpatialQueries:
             """
             if dfn_query:
                 query = query + q
-            wkb = self.aoi.get_wkb_geom()
+            if buffer is None:
+                wkb = self.aoi.get_wkb_geom()
+            else:
+                wkb = self.aoi.get_outisde_buffer(buffer).to_wkb().iloc[0]
             params = {"wkb": wkb, "srid": self.aoi.EPSG}
             cursor.execute(query, params)
             rows = cursor.fetchall()
@@ -185,16 +219,18 @@ class OracleSpatialQueries:
             gdf = None
         return gdf
 
-    def get_intersect_local(self, table, dfn_query=None):
+    def get_intersect_local(self, table, dfn_query=None,buffer=None):
         if self.has_relate(table=table, dfn_query=dfn_query):
-            df1 = self.get_related(table=table, dfn_query=dfn_query)
-            intersection_df = df1.overlay(right=self.aoi.df, how="intersection")
+            df1 = self.get_related(table=table, dfn_query=dfn_query, buffer=buffer)
+            if buffer is None:
+                intersection_df = df1.overlay(right=self.aoi.df, how="intersection")
+            else:
+                the_aoi = gpd.GeoDataFrame(self.aoi.get_outisde_buffer(buffer))
+                the_aoi = the_aoi.rename(columns={0:'geometry'}).set_geometry('geometry',crs=f"EPSG:{self.aoi.EPSG}")
+                intersection_df = df1.overlay(right=the_aoi, how="intersection")
             return intersection_df
         else:
             return None
-
-    def set_aoi_buffer(self, buffer):
-        pass
 
     def has_table(self, db_table):
         """
